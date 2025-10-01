@@ -1,6 +1,8 @@
+# ui.py — thèmes clair/sombre + pochette + prochain titre + badge auditeurs + multi-stations + RPC
+
 import requests
 from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QPixmap, QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QLabel, QPushButton, QSlider, QComboBox,
     QVBoxLayout, QHBoxLayout, QFrame, QMessageBox
@@ -12,31 +14,58 @@ from rpc import DiscordRPCManager
 from updater import UpdateChecker, UpdateDownloader
 
 
-APP_QSS = """
+# -------------------- THEMES --------------------
+APP_QSS_DARK = """
 * { font-family: Segoe UI, Roboto, Arial; }
 QMainWindow { background: #0f1216; }
 QFrame#card { background: #171b22; border: 1px solid #222832; border-radius: 14px; }
 QLabel#title { color: #e5f0ff; font-size: 18px; font-weight: 600; }
-QLabel#now { color: #b9c4d1; font-size: 14px; }
+QLabel#now { color: #d6e2f2; font-size: 14px; }
+QLabel#next { color: #8ea3bd; font-size: 12px; }
 QLabel.small { color:#8e9aab; font-size:12px; }
 QPushButton { background: #1f2530; color: #eaf2ff; border: 1px solid #2b3340; border-radius: 10px; padding: 8px 12px; }
 QPushButton:hover { background: #2a3140; } QPushButton:pressed { background: #323a49; }
 QPushButton#play { font-weight: 600; font-size: 14px; }
 QSlider::groove:horizontal { height: 6px; background: #2a3140; border-radius: 3px; }
 QSlider::handle:horizontal { width: 16px; height:16px; margin: -6px 0; background: #6ca0ff; border-radius: 8px; border: 2px solid #cfe0ff; }
+QLabel#badge { background:#243043; color:#eaf2ff; border-radius:10px; padding:3px 8px; border:1px solid #32405a; }
+QLabel#cover { background:#0b0e13; border-radius:10px; }
 """
+
+APP_QSS_LIGHT = """
+* { font-family: Segoe UI, Roboto, Arial; }
+QMainWindow { background: #f6f8fb; }
+QFrame#card { background: #ffffff; border: 1px solid #e5e9f0; border-radius: 14px; }
+QLabel#title { color: #111827; font-size: 18px; font-weight: 600; }
+QLabel#now { color: #1f2937; font-size: 14px; }
+QLabel#next { color: #6b7280; font-size: 12px; }
+QLabel.small { color:#6b7280; font-size:12px; }
+QPushButton { background: #f3f4f6; color: #111827; border: 1px solid #e5e7eb; border-radius: 10px; padding: 8px 12px; }
+QPushButton:hover { background: #e5e7eb; } QPushButton:pressed { background: #d1d5db; }
+QPushButton#play { font-weight: 600; font-size: 14px; }
+QSlider::groove:horizontal { height: 6px; background: #e5e7eb; border-radius: 3px; }
+QSlider::handle:horizontal { width: 16px; height:16px; margin: -6px 0; background: #3b82f6; border-radius: 8px; border: 2px solid #bfdbfe; }
+QLabel#badge { background:#eef2ff; color:#1f2937; border-radius:10px; padding:3px 8px; border:1px solid #dbeafe; }
+QLabel#cover { background:#eef2ff; border-radius:10px; }
+"""
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon(str((utils.app_dir() / "assets" / "app.ico").resolve())))
         self.setWindowTitle(f"🎵 {config.APP_NAME} v{config.CURRENT_VERSION}")
-        self.setMinimumSize(460, 280)
+        # Icône de fenêtre si présent
+        try:
+            self.setWindowIcon(QIcon(str((utils.app_dir() / "assets" / "app.ico").resolve())))
+        except Exception:
+            pass
+
+        self.setMinimumSize(520, 320)
 
         # Settings
         self.settings_path = utils.app_dir() / config.SETTINGS_FILE
         self.settings = utils.load_json(self.settings_path, {
-            "volume": 80, "autoplay": True, "station": None
+            "volume": 80, "autoplay": True, "station": None, "theme": "dark"
         })
 
         # Stations (depuis GitHub) + sélection courante
@@ -59,7 +88,7 @@ class MainWindow(QMainWindow):
 
         # UI
         self.build_ui(names, default_name)
-        self.setStyleSheet(APP_QSS)
+        self.apply_theme(self.settings.get("theme", "dark"))
         self.lbl_rpc.setText("RPC : connecté ✅" if rpc_ok else "RPC : inactif ❌")
 
         # Sync état VLC
@@ -70,7 +99,7 @@ class MainWindow(QMainWindow):
         self.state_timer.start()
 
         # NowPlaying + RPC refresh
-        self.timer = QTimer(self); self.timer.setInterval(12000)
+        self.timer = QTimer(self); self.timer.setInterval(12_000)
         self.timer.timeout.connect(self.refresh_nowplaying)
         self.timer.start()
         self.refresh_nowplaying()
@@ -83,40 +112,74 @@ class MainWindow(QMainWindow):
         if utils.is_frozen_exe():
             QTimer.singleShot(1500, self.start_silent_update_check)
 
+        # cache art
+        self._last_art_url = None
+
     # ---------------- UI ----------------
     def build_ui(self, station_names, default_name):
         root = QWidget(); self.setCentralWidget(root)
         v = QVBoxLayout(root); v.setContentsMargins(14,14,14,14); v.setSpacing(12)
 
-        # Header + station picker
-        header = QHBoxLayout()
+        # Header
+        header = QHBoxLayout(); header.setSpacing(10)
         t = QLabel("🎶 InsporaRadio"); t.setObjectName("title")
-        header.addWidget(t); header.addStretch(1)
+        header.addWidget(t)
 
+        # Badge auditeurs
+        self.lbl_badge = QLabel("👥 0"); self.lbl_badge.setObjectName("badge")
+        header.addWidget(self.lbl_badge)
+
+        header.addStretch(1)
+
+        # Choix station
+        header.addWidget(QLabel("Station :"))
         self.cb_station = QComboBox()
         self.cb_station.addItems(station_names)
+        self.cb_station.setEnabled(len(station_names) > 1)
         if default_name in station_names:
             self.cb_station.setCurrentText(default_name)
         self.cb_station.currentTextChanged.connect(self.on_station_changed)
-        header.addWidget(QLabel("Station :"))
         header.addWidget(self.cb_station)
 
+        # Toggle thème
+        self.btn_theme = QPushButton("🌙")
+        self.btn_theme.setToolTip("Basculer thème clair/sombre")
+        self.btn_theme.clicked.connect(self.toggle_theme)
+        header.addWidget(self.btn_theme)
+
+        # Version
         self.lbl_ver = QLabel(f"v{config.CURRENT_VERSION}"); self.lbl_ver.setProperty("class","small")
         header.addWidget(self.lbl_ver)
 
+        # Card principale
         card = QFrame(); card.setObjectName("card")
         cv = QVBoxLayout(card); cv.setContentsMargins(14,12,14,12); cv.setSpacing(8)
-        self.lbl_now = QLabel("⏸️ Radio arrêtée"); self.lbl_now.setObjectName("now")
-        cv.addWidget(self.lbl_now)
 
-        # Controls
+        # Ligne titre + pochette
+        top = QHBoxLayout(); top.setSpacing(12)
+
+        self.lbl_cover = QLabel(); self.lbl_cover.setObjectName("cover")
+        self.lbl_cover.setFixedSize(112, 112); self.lbl_cover.setScaledContents(True)
+        top.addWidget(self.lbl_cover)
+
+        textcol = QVBoxLayout(); textcol.setSpacing(6)
+        self.lbl_now = QLabel("⏸️ Radio arrêtée"); self.lbl_now.setObjectName("now")
+        textcol.addWidget(self.lbl_now)
+        self.lbl_next = QLabel("")  # prochain titre
+        self.lbl_next.setObjectName("next")
+        textcol.addWidget(self.lbl_next)
+        top.addLayout(textcol)
+
+        cv.addLayout(top)
+
+        # Contrôles
         ctrl = QHBoxLayout(); ctrl.setSpacing(10)
         self.btn_play = QPushButton("▶️  Lecture"); self.btn_play.setObjectName("play")
         self.btn_play.clicked.connect(self.handle_play)
         ctrl.addWidget(self.btn_play)
         cv.addLayout(ctrl)
 
-        # RPC status
+        # Statut RPC
         self.lbl_rpc = QLabel("RPC : …"); self.lbl_rpc.setProperty("class","small")
         cv.addWidget(self.lbl_rpc)
 
@@ -132,13 +195,24 @@ class MainWindow(QMainWindow):
 
         # Actions
         actions = QHBoxLayout()
-        self.btn_reload = QPushButton("🖼️  Recharger images")
-        self.btn_reload.clicked.connect(self.reload_images_map)
-        self.btn_update = QPushButton("🔄  Vérifier les mises à jour")
-        self.btn_update.clicked.connect(self.on_check_update_clicked)
+        self.btn_reload = QPushButton("🖼️  Recharger images"); self.btn_reload.clicked.connect(self.reload_images_map)
+        self.btn_update = QPushButton("🔄  Vérifier les mises à jour"); self.btn_update.clicked.connect(self.on_check_update_clicked)
         actions.addWidget(self.btn_reload); actions.addWidget(self.btn_update)
 
         v.addLayout(header); v.addWidget(card); v.addLayout(actions)
+
+    # ---------------- Thème ----------------
+    def apply_theme(self, theme: str):
+        theme = (theme or "dark").lower()
+        self.current_theme = theme
+        self.setStyleSheet(APP_QSS_LIGHT if theme == "light" else APP_QSS_DARK)
+        self.btn_theme.setText("☀️" if theme == "light" else "🌙")
+        # Sauver
+        self.settings["theme"] = theme
+        utils.save_json(self.settings_path, self.settings)
+
+    def toggle_theme(self):
+        self.apply_theme("light" if self.current_theme == "dark" else "dark")
 
     # ---------------- Player ----------------
     def handle_play(self):
@@ -161,6 +235,9 @@ class MainWindow(QMainWindow):
                 self.lbl_now.setText("⏸️ Radio arrêtée")
         elif s in ("State.Opening", "State.Buffering"):
             self.btn_play.setText("⏳  Chargement…")
+        elif s == "State.Error":
+            # petit retry doux si erreur
+            QTimer.singleShot(1200, lambda: self.player.start_stream(self.current_station["stream_url"]))
 
     def on_volume(self, v: int):
         self.player.set_volume(v); self.lbl_vol.setText(f"{v}%")
@@ -170,12 +247,10 @@ class MainWindow(QMainWindow):
     def on_station_changed(self, name: str):
         self.current_station_name = name
         self.current_station = utils.get_station(self.stations, name)
-        # recharge la map d’images pour cette station (inline/URL → fusion avec globale)
         self.images_map = utils.load_images_map_for_station(self.current_station)
         self.settings["station"] = name
         utils.save_json(self.settings_path, self.settings)
 
-        # switch de flux si on est en lecture
         state = str(self.player.state())
         if self.playing or state in ("State.Playing", "State.Opening", "State.Buffering"):
             self.player.start_stream(self.current_station["stream_url"])
@@ -185,16 +260,51 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(300, self.refresh_nowplaying)
 
     # ---------------- NowPlaying & RPC ----------------
+    def _set_cover(self, url: str | None):
+        if not url or url == self._last_art_url:
+            return
+        try:
+            r = requests.get(url, timeout=5)
+            if r.status_code == 200:
+                pix = QPixmap()
+                pix.loadFromData(r.content)
+                self.lbl_cover.setPixmap(pix)
+                self._last_art_url = url
+        except Exception:
+            pass
+
     def refresh_nowplaying(self):
         try:
             api_url = self.current_station.get("nowplaying_url", config.API_URL)
-            data = requests.get(api_url, timeout=4).json()
-            np = data.get("now_playing", {}); song = np.get("song", {})
-            title = song.get("title", "Inconnu"); artist = song.get("artist", "")
+            data = requests.get(api_url, timeout=5).json()
+
+            np = data.get("now_playing", {}) or {}
+            song = np.get("song", {}) or {}
+            title = song.get("title", "Inconnu")
+            artist = song.get("artist", "")
+            art_url = song.get("art")
+
+            # prochain titre si dispo
+            pn = data.get("playing_next", {}) or {}
+            pn_song = pn.get("song", {}) or {}
+            next_title = pn_song.get("title")
+            next_artist = pn_song.get("artist")
+
             listeners = (data.get("listeners") or {}).get("total", 0)
             live = (data.get("live") or {}).get("is_live", False)
-            self.lbl_now.setText(f"🎼 {title} — {artist}   |   👥 {listeners} auditeurs")
 
+            # UI
+            self.lbl_now.setText(f"🎼 {title} — {artist}")
+            self.lbl_badge.setText(f"👥 {listeners}")
+            if next_title:
+                na = f" — {next_artist}" if next_artist else ""
+                self.lbl_next.setText(f"🔜 À suivre : {next_title}{na}")
+            else:
+                self.lbl_next.setText("")
+
+            self._set_cover(art_url)
+
+            # RPC
             if not self.rpc.enabled():
                 if self.rpc.connect():
                     self.lbl_rpc.setText("RPC : connecté ✅")
@@ -202,7 +312,9 @@ class MainWindow(QMainWindow):
                     self.lbl_rpc.setText("RPC : inactif ❌")
             else:
                 img = utils.choose_image(self.images_map, title, live)
-                self.rpc.update(title, artist, listeners, img)
+                small = self.current_station.get("rpc_small_image")
+                self.rpc.update(title, artist, listeners, img, small_image=small, small_text=self.current_station_name)
+
         except Exception as e:
             print("[NowPlaying]", e)
 
