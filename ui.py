@@ -1,5 +1,6 @@
 import requests
 from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QLabel, QPushButton, QSlider, QComboBox,
     QVBoxLayout, QHBoxLayout, QFrame, QMessageBox
@@ -28,6 +29,7 @@ QSlider::handle:horizontal { width: 16px; height:16px; margin: -6px 0; backgroun
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon(str((utils.app_dir() / "assets" / "app.ico").resolve())))
         self.setWindowTitle(f"🎵 {config.APP_NAME} v{config.CURRENT_VERSION}")
         self.setMinimumSize(460, 280)
 

@@ -1,0 +1,23 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#6C63FF"></stop>
+      <stop offset="100%" stop-color="#2EC5FF"></stop>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000" flood-opacity="0.25"></feDropShadow>
+    </filter>
+  </defs>
+
+  <!-- fond arrondi -->
+  <rect x="32" y="32" width="448" height="448" rx="96" fill="url(#g)" filter="url(#shadow)"></rect>
+
+  <!-- note de musique -->
+  <g fill="#FFFFFF">
+    <!-- tige + tête -->
+    <path d="M300 132v168.5c-10-7-23.2-11.5-38-11.5-33.1 0-60 20.7-60 46.2s26.9 46.2 60 46.2 60-20.7 60-46.2V196h56v-64h-78z" opacity="0.98"></path>
+    <!-- ondule (vagues radio) -->
+    <path d="M382 334c0-61-49-110-110-110" fill="none" stroke="#FFFFFF" stroke-width="20" stroke-linecap="round" opacity="0.35"></path>
+    <path d="M408 334c0-75-61-136-136-136" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round" opacity="0.22"></path>
+  </g>
+</svg>
