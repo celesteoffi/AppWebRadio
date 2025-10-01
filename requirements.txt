@@ -1,4 +1,4 @@
-pypresence==4.3.0
-requests==2.32.3
-python-vlc==3.0.20123   
-
+PySide6
+python-vlc
+pypresence
+requests

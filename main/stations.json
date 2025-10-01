@@ -1,0 +1,22 @@
+{
+  "default": "InsporaRadio",
+  "stations": {
+    "InsporaRadio": {
+      "stream_url": "https://radio.inspora.fr/listen/wazouinfraweb/radio.mp3",
+      "nowplaying_url": "https://radio.inspora.fr/api/nowplaying/1",
+      "images_map_url": "https://inspora.fr/images_map_inspora.json"
+    },
+    "InsporaChill": {
+      "stream_url": "https://radio.inspora.fr/listen/chillradio/radio.mp3",
+      "nowplaying_url": "https://radio.inspora.fr/api/nowplaying/2",
+      "images_map": {
+        "default": "default_cover",
+        "live": "logo_chill_live",
+        "titles": {
+          "Best Chill Music": "chilling",
+          "Sleep": "logo_sleep"
+        }
+      }
+    }
+  }
+}
