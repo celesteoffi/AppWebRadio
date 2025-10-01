@@ -6,32 +6,68 @@ import threading
 import requests
 import vlc
 from pypresence import Presence
-from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QSlider
+from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QLabel, QVBoxLayout, QSlider, QMessageBox
 from PySide6.QtCore import Qt
 
 # ---------------------------
 # CONFIG
 # ---------------------------
-DISCORD_CLIENT_ID = "1419735937545404456"  # remplace par ton vrai Client ID
+DISCORD_CLIENT_ID = "1419735937545404456"  # 🔴 à remplacer
 STREAM_URL = "https://radio.inspora.fr/listen/wazouinfraweb/radio.mp3"
 API_URL = "https://radio.inspora.fr/api/nowplaying/1"
-MAP_FILE = "images_map.json"
+GITHUB_REPO = "celesteoffi/AppWebRadio"
+CURRENT_VERSION = "1.0.0"
+MAP_URL = "https://raw.githubusercontent.com/celesteoffi/AppWebRadio/main/images_map.json"
+
+# ---------------------------
+# Charger libVLC embarqué
+# ---------------------------
+if sys.platform.startswith("win"):
+    vlc_path = os.path.join(os.path.dirname(__file__), "vlc")
+    if os.path.exists(vlc_path):
+        os.add_dll_directory(vlc_path)
 
 # ---------------------------
 # Charger mapping images
 # ---------------------------
-with open(MAP_FILE, "r", encoding="utf-8") as f:
-    config = json.load(f)
+def load_images_map():
+    try:
+        r = requests.get(MAP_URL, timeout=5)
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        print("[!] Erreur chargement map GitHub :", e)
+
+    # fallback
+    return {"default": "logo_default", "live": "logo_live", "titles": {}}
+
+config = load_images_map()
 
 def choose_image(title, live):
     if live:
-        return config["live"]
-
-    for song_title, img in config["titles"].items():
-        if song_title.lower() in title.lower():  # match partiel insensible à la casse
+        return config.get("live", "logo_live")
+    for song_title, img in config.get("titles", {}).items():
+        if song_title.lower() in title.lower():
             return img
+    return config.get("default", "logo_default")
 
-    return config["default"]
+# ---------------------------
+# Vérifier update GitHub
+# ---------------------------
+def check_update():
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+        r = requests.get(url, timeout=5).json()
+        latest_version = r.get("tag_name", "").replace("v", "")
+        download_url = None
+        if r.get("assets"):
+            download_url = r["assets"][0]["browser_download_url"]
+
+        if latest_version and latest_version != CURRENT_VERSION:
+            return (latest_version, download_url)
+    except Exception as e:
+        print("[!] Erreur vérification maj :", e)
+    return None
 
 # ---------------------------
 # Classe Application
@@ -39,9 +75,9 @@ def choose_image(title, live):
 class RadioApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("🎶 InsporaRadio Player")
+        self.setWindowTitle(f"🎶 InsporaRadio Player v{CURRENT_VERSION}")
 
-        # VLC player
+        # VLC
         instance = vlc.Instance("--no-video")
         self.player = instance.media_player_new()
         media = instance.media_new(STREAM_URL)
@@ -52,11 +88,11 @@ class RadioApp(QWidget):
         try:
             self.rpc.connect()
         except Exception as e:
-            print("[!] Impossible de se connecter à Discord :", e)
+            print("[!] Discord RPC non dispo :", e)
             self.rpc = None
         self.start_ts = int(time.time())
 
-        # UI elements
+        # UI
         self.label = QLabel("⏸️ Radio arrêtée")
         self.btn = QPushButton("▶️ Lecture")
         self.btn.clicked.connect(self.toggle_play)
@@ -73,6 +109,15 @@ class RadioApp(QWidget):
         layout.addWidget(QLabel("🔊 Volume"))
         layout.addWidget(self.volume_slider)
         self.setLayout(layout)
+
+        # Vérifier update
+        update = check_update()
+        if update:
+            latest, url = update
+            QMessageBox.information(
+                self, "Mise à jour dispo",
+                f"🚀 Version {latest} disponible !\nTélécharge ici :\n{url}"
+            )
 
         # Threads
         threading.Thread(target=self.update_info_loop, daemon=True).start()
@@ -91,7 +136,6 @@ class RadioApp(QWidget):
         self.player.audio_set_volume(value)
 
     def update_info_loop(self):
-        """Boucle pour récupérer les infos NowPlaying + update Discord"""
         while True:
             try:
                 r = requests.get(API_URL, timeout=5).json()
@@ -106,19 +150,16 @@ class RadioApp(QWidget):
 
                 if self.rpc:
                     large_image = choose_image(title, live)
-                    try:
-                        self.rpc.update(
-                            details=f"{title} — {artist}",
-                            state=f"👥 {listeners} auditeurs",
-                            start=self.start_ts,
-                            large_image=large_image,
-                            large_text="InsporaRadio"
-                        )
-                        print(f"[RPC] {title} [{large_image}]")
-                    except Exception as e:
-                        print("[!] Erreur RPC :", e)
+                    self.rpc.update(
+                        details=f"{title} — {artist}",
+                        state=f"👥 {listeners} auditeurs",
+                        start=self.start_ts,
+                        large_image=large_image,
+                        large_text="InsporaRadio"
+                    )
+                    print(f"[RPC] {title} [{large_image}]")
             except Exception as e:
-                print("[!] Erreur récupération infos :", e)
+                print("[!] Erreur update infos :", e)
 
             time.sleep(15)
 
