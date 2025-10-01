@@ -1,6 +1,6 @@
 # --- Paramètres appli ---
 APP_NAME = "InsporaRadio"
-CURRENT_VERSION = "1.0.4"  # mets à jour à chaque release
+CURRENT_VERSION = "1.0.3"  # mets à jour à chaque release
 
 # --- Discord ---
 DISCORD_CLIENT_ID = "1419735937545404456"  # ← remplace par l'ID numérique de ton app Discord
