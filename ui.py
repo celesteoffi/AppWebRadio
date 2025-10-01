@@ -256,7 +256,8 @@ class MainWindow(QMainWindow):
     def install_update(self, new_exe_path: str):
         self.btn_update.setText("Installation…")
         try:
-            utils.write_updater_and_run(new_exe_path, utils.this_exe_path())
+            import os
+            utils.write_updater_and_run(new_exe_path, utils.this_exe_path(), os.getpid())
             self.safe_quit()
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Installation échouée : {e}")

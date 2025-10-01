@@ -144,19 +144,39 @@ def download_file(url: str, dest: str):
                     f.write(chunk)
     return dest
 
-def write_updater_and_run(new_exe_path: str, target_path: str):
-    bat_path = temp_path("updater_inspora.bat")
+def write_updater_and_run(new_exe_path: str, target_path: str, pid: int | None = None):
+    """Écrit un .cmd qui attend la fin du process, remplace l'exe et relance."""
+    bat_path = temp_path("updater_inspora.cmd")
+
+    # pas de guillemets dans les variables d'environnement (on les met à l'usage)
+    pid_line = f"set PID={pid}\n" if pid else "set PID=\n"
     bat = f"""@echo off
 setlocal
-ping 127.0.0.1 -n 2 > nul
-:loop
-move /Y "{new_exe_path}" "{target_path}" > nul 2>&1
-if %errorlevel% neq 0 (
-  timeout /t 1 /nobreak > nul
-  goto loop
+{pid_line}set NEW={new_exe_path}
+set TARGET={target_path}
+
+rem --- attendre que le process {pid or ""} soit terminé ---
+if not "%PID%"=="" (
+:wait
+  tasklist /FI "PID eq %PID%" | findstr /I "%PID%" >nul
+  if %errorlevel%==0 (
+    timeout /t 1 /nobreak > nul
+    goto wait
+  )
 )
-start "" "{target_path}"
+
+rem --- remplacer l'exe par le nouveau (plus fiable via PowerShell) ---
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Try {{ Move-Item -LiteralPath $env:NEW -Destination $env:TARGET -Force }} ^
+   Catch {{ Copy-Item -LiteralPath $env:NEW -Destination $env:TARGET -Force }}"
+
+rem --- relancer l'appli ---
+start "" "%TARGET%"
+
 del "%~f0"
 """
+    from pathlib import Path
     Path(bat_path).write_text(bat, encoding="utf-8")
+    import subprocess
     subprocess.Popen(['cmd', '/c', bat_path], creationflags=subprocess.CREATE_NO_WINDOW)
+
