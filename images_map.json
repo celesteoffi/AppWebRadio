@@ -1,0 +1,20 @@
+{
+  "default": "logo_default",
+  "live": "logo_live",
+  "titles": {
+    "A qui le tour": "13",
+    "Double Team": "12",
+    "Soleil Bleu": "41",
+    "Minimum ça": "58",
+    "PARISIENN": "59",
+    "Golden": "60",
+    "Mauvais rêves": "61",
+    "Ta Marinière": "62",
+    "M'envoler": "63",
+    "La loi du papillon": "64",
+    "On attend": "65",
+    "Coeur maladroit": "66",
+    "Dépassé": "67",
+    "À nos héros du quotidien": "68"
+  }
+}
